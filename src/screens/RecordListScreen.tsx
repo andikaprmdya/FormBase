@@ -7,6 +7,8 @@ import { RootStackParamList, Record, LocationValue } from '../types';
 import { Button, Card, Loading, ErrorView } from '../components';
 import { recordAPI } from '../services/api';
 import { colors, spacing, typography, borderRadius } from '../theme';
+import { logger } from '../utils/logger';
+import { getErrorMessage } from '../utils/errors';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RecordList'>;
 
@@ -24,11 +26,9 @@ const RecordListScreen: React.FC<Props> = ({ navigation, route }) => {
       const data = await recordAPI.getByFormId(formId);
       setRecords(data || []);
     } catch (err: any) {
-      const errorMessage = err?.message?.includes('Failed to fetch')
-        ? 'Network error. Please check your internet connection and try again.'
-        : 'Failed to load records. Please try again.';
+      const errorMessage = getErrorMessage(err);
       setError(errorMessage);
-      console.error('Load records error:', err);
+      logger.error('Load records error:', err);
     } finally {
       setLoading(false);
     }
@@ -55,11 +55,9 @@ const RecordListScreen: React.FC<Props> = ({ navigation, route }) => {
               Alert.alert('Success', 'Record deleted successfully');
               loadRecords();
             } catch (err: any) {
-              const errorMessage = err?.message?.includes('Failed to fetch')
-                ? 'Network error. Please check your internet connection and try again.'
-                : 'Failed to delete record. Please try again.';
-              Alert.alert('Error', errorMessage);
-              console.error('Delete record error:', err);
+              const errorMessage = getErrorMessage(err);
+              Alert.alert('Error', errorMessage || 'Failed to delete record. Please try again.');
+              logger.error('Delete record error:', err);
             }
           },
         },
@@ -73,8 +71,9 @@ const RecordListScreen: React.FC<Props> = ({ navigation, route }) => {
       await Clipboard.setStringAsync(recordText);
       Alert.alert('Success', 'Record copied to clipboard');
     } catch (err) {
-      Alert.alert('Error', 'Failed to copy record');
-      console.error(err);
+      const errorMessage = getErrorMessage(err);
+      Alert.alert('Error', errorMessage || 'Failed to copy record');
+      logger.error('Copy record error:', err);
     }
   };
 

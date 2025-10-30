@@ -6,23 +6,23 @@ export interface MenuItem {
 
 /**
  * Shared navigation menu items for side drawer
- * Used across FormListScreen, MapScreen, and AboutScreen
- * Returns the standard menu items: Home, About, Forms
+ * Used across all tab screens for consistent navigation
+ * Returns: Records, Help, Map List (matching HomeScreen style)
  */
 export const getStandardMenuItems = (navigation: any): MenuItem[] => [
   {
-    title: 'Home',
-    icon: 'home' as const,
-    onPress: () => navigation.navigate('HomeTab'),
+    title: 'Records',
+    icon: 'list' as const,
+    onPress: () => navigation.navigate('RecordsList'),
   },
   {
-    title: 'About',
-    icon: 'information-circle' as const,
-    onPress: () => navigation.navigate('AboutTab'),
+    title: 'Help',
+    icon: 'help-circle' as const,
+    onPress: () => navigation.navigate('Help'),
   },
   {
-    title: 'Forms',
-    icon: 'document-text' as const,
-    onPress: () => navigation.navigate('FormsTab'),
+    title: 'Map List',
+    icon: 'map' as const,
+    onPress: () => navigation.navigate('MapList'),
   },
 ];

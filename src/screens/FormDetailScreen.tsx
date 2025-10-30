@@ -6,6 +6,8 @@ import { RootStackParamList, Field } from '../types';
 import { Button, Card, Loading, ErrorView } from '../components';
 import { fieldAPI } from '../services/api';
 import { colors, spacing, typography } from '../theme';
+import { logger } from '../utils/logger';
+import { getErrorMessage } from '../utils/errors';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'FormDetail'>;
 
@@ -22,8 +24,9 @@ const FormDetailScreen: React.FC<Props> = ({ navigation, route }) => {
       const data = await fieldAPI.getByFormId(formId);
       setFields(data);
     } catch (err) {
-      setError('Failed to load fields. Please try again.');
-      console.error(err);
+      const errorMessage = getErrorMessage(err);
+      setError(errorMessage);
+      logger.error('Load fields error:', err);
     } finally {
       setLoading(false);
     }
@@ -32,6 +35,7 @@ const FormDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   useFocusEffect(
     useCallback(() => {
       loadFields();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
   );
 
@@ -49,8 +53,9 @@ const FormDetailScreen: React.FC<Props> = ({ navigation, route }) => {
               await fieldAPI.delete(id);
               loadFields();
             } catch (err) {
-              Alert.alert('Error', 'Failed to delete field');
-              console.error(err);
+              const errorMessage = getErrorMessage(err);
+              Alert.alert('Error', errorMessage || 'Failed to delete field');
+              logger.error('Delete field error:', err);
             }
           },
         },

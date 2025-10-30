@@ -5,6 +5,8 @@ import { RootStackParamList } from '../types';
 import { Button, Input, Loading, ErrorView } from '../components';
 import { formAPI } from '../services/api';
 import { colors, spacing } from '../theme';
+import { logger } from '../utils/logger';
+import { getErrorMessage } from '../utils/errors';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'FormEdit'>;
 
@@ -29,8 +31,9 @@ const FormEditScreen: React.FC<Props> = ({ navigation, route }) => {
       setName(form.name);
       setDescription(form.description);
     } catch (err) {
-      setError('Failed to load form. Please try again.');
-      console.error(err);
+      const errorMessage = getErrorMessage(err);
+      setError(errorMessage);
+      logger.error('Load form error:', err);
     } finally {
       setLoading(false);
     }
@@ -67,8 +70,9 @@ const FormEditScreen: React.FC<Props> = ({ navigation, route }) => {
         },
       ]);
     } catch (err) {
-      Alert.alert('Error', 'Failed to update form. Please try again.');
-      console.error(err);
+      const errorMessage = getErrorMessage(err);
+      Alert.alert('Error', errorMessage || 'Failed to update form. Please try again.');
+      logger.error('Update form error:', err);
     } finally {
       setSaving(false);
     }

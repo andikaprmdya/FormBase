@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, Text, StyleSheet, ViewStyle, TextStyle, ActivityIndicator } from 'react-native';
+import { Pressable, Text, StyleSheet, ViewStyle, TextStyle, ActivityIndicator, StyleProp } from 'react-native';
 import { animated, useSpring } from '@react-spring/native';
 import { colors, borderRadius, typography, spacing } from '../theme';
 
@@ -12,7 +12,7 @@ interface ButtonProps {
   size?: 'small' | 'medium' | 'large';
   disabled?: boolean;
   loading?: boolean;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
   textStyle?: TextStyle;
 }
 
@@ -110,6 +110,7 @@ export const Button: React.FC<ButtonProps> = ({
       onPressIn={() => setPressed(true)}
       onPressOut={() => setPressed(false)}
       disabled={disabled || loading}
+      // @ts-ignore - React Spring animated styles conflict with ViewStyle types
       style={[getButtonStyle(), style, springProps]}
     >
       {loading ? (

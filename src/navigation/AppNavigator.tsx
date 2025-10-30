@@ -13,9 +13,10 @@ import FormDetailScreen from '../screens/FormDetailScreen';
 import FieldCreateScreen from '../screens/FieldCreateScreen';
 import RecordCreateScreen from '../screens/RecordCreateScreen';
 import RecordListScreen from '../screens/RecordListScreen';
+import RecordsListScreen from '../screens/RecordsListScreen';
 import FilterBuilderScreen from '../screens/FilterBuilderScreen';
 import HelpScreen from '../screens/HelpScreen';
-import SettingsScreen from '../screens/SettingsScreen';
+import MapListScreen from '../screens/MapListScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -78,6 +79,11 @@ export const AppNavigator: React.FC = () => {
           options={{ title: 'Records' }}
         />
         <Stack.Screen
+          name="RecordsList"
+          component={RecordsListScreen}
+          options={{ title: 'All Records' }}
+        />
+        <Stack.Screen
           name="FilterBuilder"
           component={FilterBuilderScreen}
           options={{ title: 'Filter Records' }}
@@ -88,9 +94,9 @@ export const AppNavigator: React.FC = () => {
           options={{ title: 'Help & Guide' }}
         />
         <Stack.Screen
-          name="Settings"
-          component={SettingsScreen}
-          options={{ title: 'Settings' }}
+          name="MapList"
+          component={MapListScreen}
+          options={{ title: 'Saved Locations' }}
         />
       </Stack.Navigator>
     </NavigationContainer>

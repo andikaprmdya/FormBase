@@ -8,6 +8,7 @@ import { Button, Card } from '../components';
 import { GlassHeader } from '../components/GlassHeader';
 import { SideDrawer } from '../components/SideDrawer';
 import { colors, spacing, typography, borderRadius } from '../theme';
+import { getStandardMenuItems } from '../constants/navigationMenu';
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<TabParamList, 'HomeTab'>,
@@ -16,24 +17,7 @@ type Props = CompositeScreenProps<
 
 const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const [drawerVisible, setDrawerVisible] = useState(false);
-
-  const menuItems = [
-    {
-      title: 'Records',
-      icon: 'list' as const,
-      onPress: () => navigation.navigate('FormsTab'),
-    },
-    {
-      title: 'Help',
-      icon: 'help-circle' as const,
-      onPress: () => navigation.navigate('Help'),
-    },
-    {
-      title: 'Settings',
-      icon: 'settings' as const,
-      onPress: () => navigation.navigate('Settings'),
-    },
-  ];
+  const menuItems = getStandardMenuItems(navigation);
 
   return (
     <View style={styles.container}>

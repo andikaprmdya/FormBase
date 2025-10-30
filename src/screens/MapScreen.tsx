@@ -1,17 +1,20 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Dimensions, Alert, Platform } from 'react-native';
-import { CompositeScreenProps } from '@react-navigation/native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, Dimensions, Alert, Platform, TouchableOpacity } from 'react-native';
+import { CompositeScreenProps, useFocusEffect } from '@react-navigation/native';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { TabParamList, RootStackParamList, Record, LocationValue } from '../types';
-import { Button, Loading, ErrorView } from '../components';
+import { Button, Loading, ErrorView, Card } from '../components';
 import { ScreenWrapper } from '../components/ScreenWrapper';
 import { SideDrawer } from '../components/SideDrawer';
 import { recordAPI, formAPI } from '../services/api';
 import { colors, spacing, typography } from '../theme';
 import { getStandardMenuItems } from '../constants/navigationMenu';
+import { MAP_CONFIG, ANIMATION_CONFIG, ERROR_MESSAGES } from '../constants/appConstants';
+import { logger } from '../utils/logger';
+import { getErrorMessage } from '../utils/errors';
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<TabParamList, 'MapTab'>,
@@ -26,31 +29,67 @@ interface MarkerData {
   recordId: number;
 }
 
-const MapScreen: React.FC<Props> = ({ navigation }) => {
+const MapScreen: React.FC<Props> = ({ navigation, route }) => {
   const [markers, setMarkers] = useState<MarkerData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [userLocation, setUserLocation] = useState<LocationValue | null>(null);
   const [drawerVisible, setDrawerVisible] = useState(false);
-  const [region, setRegion] = useState({
-    latitude: -27.4705,
-    longitude: 153.0260,
-    latitudeDelta: 0.0922,
-    longitudeDelta: 0.0421,
+  const [region, setRegion] = useState<{
+    latitude: number;
+    longitude: number;
+    latitudeDelta: number;
+    longitudeDelta: number;
+  }>({
+    latitude: MAP_CONFIG.DEFAULT_CENTER.latitude,
+    longitude: MAP_CONFIG.DEFAULT_CENTER.longitude,
+    latitudeDelta: MAP_CONFIG.LATITUDE_DELTA,
+    longitudeDelta: MAP_CONFIG.LONGITUDE_DELTA,
   });
 
   const menuItems = getStandardMenuItems(navigation);
+  const mapRef = useRef<MapView>(null);
 
   useEffect(() => {
     loadData();
   }, []);
+
+  // Center map when screen is focused with params
+  useFocusEffect(
+    React.useCallback(() => {
+      const hasLocationParams = route.params?.centerLat && route.params?.centerLng;
+
+      if (hasLocationParams) {
+        logger.log('Centering map on:', route.params.centerLat, route.params.centerLng);
+
+        // Offset latitude to shift marker higher on screen (subtract from latitude)
+        const newRegion = {
+          latitude: route.params.centerLat! + MAP_CONFIG.LATITUDE_OFFSET,
+          longitude: route.params.centerLng!,
+          latitudeDelta: MAP_CONFIG.LATITUDE_DELTA,
+          longitudeDelta: MAP_CONFIG.LONGITUDE_DELTA,
+        };
+
+        // Use setTimeout to ensure the map is ready and loadData doesn't override
+        setTimeout(() => {
+          setRegion(newRegion);
+          mapRef.current?.animateToRegion(newRegion, ANIMATION_CONFIG.MAP_CENTER_DURATION);
+        }, ANIMATION_CONFIG.MAP_ANIMATION_DELAY);
+
+        // Clear params after using them
+        setTimeout(() => {
+          navigation.setParams({ centerLat: undefined, centerLng: undefined });
+        }, ANIMATION_CONFIG.NAV_PARAMS_CLEAR_DELAY);
+      }
+    }, [route.params?.centerLat, route.params?.centerLng])
+  );
 
   /**
    * Load map data including user location and all location markers from records
    * Requests location permission, fetches all forms and their records,
    * extracts location fields, and centers map on user or first marker
    */
-  const loadData = async () => {
+  const loadData = async (shouldCenterOnUser: boolean = true) => {
     try {
       setLoading(true);
       setError(null);
@@ -65,14 +104,17 @@ const MapScreen: React.FC<Props> = ({ navigation }) => {
             lng: location.coords.longitude,
           };
           setUserLocation(userLoc);
-          setRegion({
-            latitude: userLoc.lat,
-            longitude: userLoc.lng,
-            latitudeDelta: 0.0922,
-            longitudeDelta: 0.0421,
-          });
+          // Only center on user if shouldCenterOnUser is true
+          if (shouldCenterOnUser) {
+            setRegion({
+              latitude: userLoc.lat + MAP_CONFIG.LATITUDE_OFFSET,
+              longitude: userLoc.lng,
+              latitudeDelta: MAP_CONFIG.LATITUDE_DELTA,
+              longitudeDelta: MAP_CONFIG.LONGITUDE_DELTA,
+            });
+          }
         } catch (err) {
-          console.log('Could not get user location:', err);
+          logger.log('Could not get user location:', err);
         }
       }
 
@@ -100,24 +142,24 @@ const MapScreen: React.FC<Props> = ({ navigation }) => {
             });
           });
         } catch (err) {
-          console.log(`Failed to load records for form ${form.id}:`, err);
+          logger.log(`Failed to load records for form ${form.id}:`, err);
         }
       }
 
       setMarkers(allMarkers);
 
-      // If we have markers but no user location, center on first marker
-      if (allMarkers.length > 0 && !userLocation) {
+      // If we have markers but no user location, center on first marker (only if shouldCenterOnUser is true)
+      if (shouldCenterOnUser && allMarkers.length > 0 && !userLocation) {
         setRegion({
-          latitude: allMarkers[0].location.lat,
+          latitude: allMarkers[0].location.lat + MAP_CONFIG.LATITUDE_OFFSET,
           longitude: allMarkers[0].location.lng,
-          latitudeDelta: 0.0922,
-          longitudeDelta: 0.0421,
+          latitudeDelta: MAP_CONFIG.LATITUDE_DELTA,
+          longitudeDelta: MAP_CONFIG.LONGITUDE_DELTA,
         });
       }
     } catch (err) {
       setError('Failed to load map data. Please try again.');
-      console.error(err);
+      logger.error(err);
     } finally {
       setLoading(false);
     }
@@ -133,10 +175,10 @@ const MapScreen: React.FC<Props> = ({ navigation }) => {
   const handleCenterOnUser = async () => {
     if (userLocation) {
       setRegion({
-        latitude: userLocation.lat,
+        latitude: userLocation.lat + MAP_CONFIG.LATITUDE_OFFSET,
         longitude: userLocation.lng,
-        latitudeDelta: 0.0922,
-        longitudeDelta: 0.0421,
+        latitudeDelta: MAP_CONFIG.LATITUDE_DELTA,
+        longitudeDelta: MAP_CONFIG.LONGITUDE_DELTA,
       });
     } else {
       try {
@@ -153,14 +195,15 @@ const MapScreen: React.FC<Props> = ({ navigation }) => {
         };
         setUserLocation(userLoc);
         setRegion({
-          latitude: userLoc.lat,
+          latitude: userLoc.lat + MAP_CONFIG.LATITUDE_OFFSET,
           longitude: userLoc.lng,
-          latitudeDelta: 0.0922,
-          longitudeDelta: 0.0421,
+          latitudeDelta: MAP_CONFIG.LATITUDE_DELTA,
+          longitudeDelta: MAP_CONFIG.LONGITUDE_DELTA,
         });
       } catch (err) {
-        Alert.alert('Error', 'Failed to get your location');
-        console.error(err);
+        const errorMessage = getErrorMessage(err);
+        Alert.alert('Error', errorMessage || 'Failed to get your location');
+        logger.error('Get location error:', err);
       }
     }
   };
@@ -185,6 +228,7 @@ const MapScreen: React.FC<Props> = ({ navigation }) => {
     <ScreenWrapper title="Map" subtitle="View locations" onMenuPress={() => setDrawerVisible(true)}>
       <View style={styles.container}>
       <MapView
+        ref={mapRef}
         provider={PROVIDER_DEFAULT}
         style={styles.map}
         region={region}
@@ -232,11 +276,16 @@ const MapScreen: React.FC<Props> = ({ navigation }) => {
       )}
 
       <View style={styles.overlay}>
-        <View style={styles.info}>
+        <TouchableOpacity
+          style={styles.info}
+          onPress={() => navigation.navigate('MapList')}
+          activeOpacity={0.7}
+        >
           <Text style={styles.infoText}>
             {markers.length} location {markers.length === 1 ? 'marker' : 'markers'}
           </Text>
-        </View>
+          <Text style={styles.infoSubtext}>Tap to view list →</Text>
+        </TouchableOpacity>
 
         <View style={styles.actions}>
           <Button
@@ -248,7 +297,7 @@ const MapScreen: React.FC<Props> = ({ navigation }) => {
           />
           <Button
             title="Refresh"
-            onPress={loadData}
+            onPress={() => loadData(true)}
             variant="secondary"
             size="small"
             style={styles.button}
@@ -276,16 +325,16 @@ const styles = StyleSheet.create({
   },
   overlay: {
     position: 'absolute',
-    top: spacing.md,
     left: spacing.md,
     right: spacing.md,
-    bottom: Platform.OS === 'ios' ? 100 : 80, // Add bottom spacing for tab bar
+    bottom: Platform.OS === 'ios' ? 20 : 30,
+    flexDirection: 'column',
+    gap: spacing.sm,
   },
   info: {
     backgroundColor: 'rgba(10, 14, 39, 0.85)',
     borderRadius: 12,
     padding: spacing.md,
-    marginBottom: spacing.md,
     borderWidth: 1,
     borderColor: 'rgba(0, 240, 255, 0.2)',
   },
@@ -294,6 +343,13 @@ const styles = StyleSheet.create({
     fontWeight: typography.semibold,
     color: colors.text,
     textAlign: 'center',
+    marginBottom: spacing.xs,
+  },
+  infoSubtext: {
+    fontSize: typography.caption,
+    color: colors.primary,
+    textAlign: 'center',
+    fontWeight: typography.semibold,
   },
   actions: {
     flexDirection: 'row',

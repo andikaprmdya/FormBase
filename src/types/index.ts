@@ -48,7 +48,7 @@ export interface FilterCriteria {
 
 export type RootStackParamList = {
   Landing: undefined;
-  MainTabs: undefined;
+  MainTabs: { screen?: keyof TabParamList; params?: any } | undefined;
   Home: undefined;
   About: undefined;
   FormList: undefined;
@@ -58,15 +58,19 @@ export type RootStackParamList = {
   FieldCreate: { formId: number };
   RecordCreate: { formId: number; formName: string };
   RecordList: { formId: number; formName: string };
+  RecordsList: undefined;
   FilterBuilder: { formId: number; formName: string };
   Map: undefined;
   Help: undefined;
-  Settings: undefined;
+  MapList: undefined;
 };
 
 export type TabParamList = {
   HomeTab: undefined;
   FormsTab: undefined;
-  MapTab: undefined;
+  MapTab: {
+    centerLat?: number;
+    centerLng?: number;
+  } | undefined;
   AboutTab: undefined;
 };

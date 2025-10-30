@@ -1,6 +1,9 @@
 import { Form, Field, Record, FilterCriteria } from '../types';
+import { logger } from '../utils/logger';
+import { NetworkError, APIError, parseFetchError } from '../utils/errors';
+import { API_CONFIG } from '../constants/appConstants';
 
-const API_BASE = 'https://comp2140a3.uqcloud.net/api';
+const API_BASE = API_CONFIG.BASE_URL;
 const JWT_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoic3R1ZGVudCIsInVzZXJuYW1lIjoiczQ5MDU4ODkifQ.JptTlKPqXgNhUCE_dP3ESwfqsUYaw3SGNXAYfIH3yzc';
 const USERNAME = 's4905889';
 
@@ -33,14 +36,14 @@ const getHeaders = (method?: string) => {
  * @returns URL query string for PostgREST API
  *
  * @example
- * // Simple AND case: name=John&age>25
+ * // Simple AND case: values->name.eq.John&values->age.gt.25
  * buildFilterQuery([
  *   { field: 'name', operator: 'eq', value: 'John', logic: 'and' },
  *   { field: 'age', operator: 'gt', value: '25' }
  * ])
  *
  * @example
- * // OR case: or=(name.eq.John,name.eq.Jane)
+ * // OR case: or=(values->>name.eq.John,values->>name.eq.Jane)
  * buildFilterQuery([
  *   { field: 'name', operator: 'eq', value: 'John', logic: 'or' },
  *   { field: 'name', operator: 'eq', value: 'Jane' }
@@ -77,7 +80,8 @@ export const buildFilterQuery = (filters: FilterCriteria[]): string => {
       queryValue = `${filter.value}*`; // Starts with
     }
 
-    currentGroup.push(`values->${filter.field}.${filter.operator}.${queryValue}`);
+    // For JSONB fields, use ->> for text extraction in OR clauses
+    currentGroup.push(`values->>${filter.field}.${filter.operator}.${queryValue}`);
 
     if (filter.logic === 'or' && index < filters.length - 1) {
       // Continue current OR group
@@ -93,9 +97,14 @@ export const buildFilterQuery = (filters: FilterCriteria[]): string => {
     groups.push(currentGroup);
   }
 
-  // Build query with or=() grouping for PostgREST
+  // Build query with proper PostgREST syntax
+  // For OR groups with JSONB, use or=(values->>field.op.val,...)
   return groups.map(group => {
-    if (group.length === 1) return group[0];
+    if (group.length === 1) {
+      // Single condition - replace ->> with -> for regular access
+      return group[0].replace('values->>', 'values->');
+    }
+    // Multiple conditions in OR group - use or=(...) wrapper
     return `or=(${group.join(',')})`;
   }).join('&');
 };
@@ -107,26 +116,36 @@ export const buildFilterQuery = (filters: FilterCriteria[]): string => {
 export const formAPI = {
   getAll: async (): Promise<Form[]> => {
     try {
-      console.log('Fetching forms from:', `${API_BASE}/form?username=eq.${USERNAME}`);
-      const response = await fetch(`${API_BASE}/form?username=eq.${USERNAME}`, {
+      const url = `${API_BASE}/form?username=eq.${USERNAME}`;
+      logger.log('Fetching forms from:', url);
+
+      const response = await fetch(url, {
         headers: getHeaders(),
       });
-      console.log('Response status:', response.status);
-      console.log('Response ok:', response.ok);
+
+      logger.log('Forms response status:', response.status);
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('API Error Response:', errorText);
-        throw new Error(`Failed to fetch forms: ${response.status} ${errorText}`);
+        logger.error('Forms API Error Response:', errorText);
+        throw new APIError(`Failed to fetch forms: ${errorText}`, response.status);
       }
 
       const data = await response.json();
-      console.log('Fetched forms:', data);
+      logger.log(`Fetched ${data.length} forms`);
       return data;
     } catch (error) {
-      console.error('Error fetching forms:', error);
-      console.error('Error details:', JSON.stringify(error, null, 2));
-      throw error;
+      logger.error('Error fetching forms:', error);
+
+      if (error instanceof APIError) {
+        throw error;
+      }
+
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new NetworkError();
+      }
+
+      throw new APIError('Failed to load forms. Please try again.', 500);
     }
   },
 
@@ -139,32 +158,32 @@ export const formAPI = {
       const data = await response.json();
       return data[0];
     } catch (error) {
-      console.error('Error fetching form:', error);
+      logger.error('Error fetching form:', error);
       throw error;
     }
   },
 
   create: async (form: Omit<Form, 'id' | 'username'>): Promise<Form> => {
     try {
-      console.log('Creating form:', { ...form, username: USERNAME });
+      logger.log('Creating form:', { ...form, username: USERNAME });
       const response = await fetch(`${API_BASE}/form`, {
         method: 'POST',
         headers: getHeaders('POST'),
         body: JSON.stringify({ ...form, username: USERNAME }),
       });
-      console.log('Create form response status:', response.status);
+      logger.log('Create form response status:', response.status);
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('Create form error:', errorText);
+        logger.error('Create form error:', errorText);
         throw new Error(`Failed to create form: ${response.status} ${errorText}`);
       }
 
       const data = await response.json();
-      console.log('Created form data:', data);
+      logger.log('Created form data:', data);
       return Array.isArray(data) ? data[0] : data;
     } catch (error) {
-      console.error('Error creating form:', error);
+      logger.error('Error creating form:', error);
       throw error;
     }
   },
@@ -180,7 +199,7 @@ export const formAPI = {
       const data = await response.json();
       return Array.isArray(data) ? data[0] : data;
     } catch (error) {
-      console.error('Error updating form:', error);
+      logger.error('Error updating form:', error);
       throw error;
     }
   },
@@ -193,7 +212,7 @@ export const formAPI = {
       });
       if (!response.ok) throw new Error('Failed to delete form');
     } catch (error) {
-      console.error('Error deleting form:', error);
+      logger.error('Error deleting form:', error);
       throw error;
     }
   },
@@ -212,14 +231,14 @@ export const fieldAPI = {
       if (!response.ok) throw new Error('Failed to fetch fields');
       return await response.json();
     } catch (error) {
-      console.error('Error fetching fields:', error);
+      logger.error('Error fetching fields:', error);
       throw error;
     }
   },
 
   create: async (field: Omit<Field, 'id' | 'username'>): Promise<Field> => {
     try {
-      console.log('Creating field:', { ...field, username: USERNAME });
+      logger.log('Creating field:', { ...field, username: USERNAME });
       const response = await fetch(`${API_BASE}/field`, {
         method: 'POST',
         headers: getHeaders('POST'),
@@ -228,15 +247,15 @@ export const fieldAPI = {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('Create field error:', errorText);
+        logger.error('Create field error:', errorText);
         throw new Error(`Failed to create field: ${response.status} ${errorText}`);
       }
 
       const data = await response.json();
-      console.log('Created field data:', data);
+      logger.log('Created field data:', data);
       return Array.isArray(data) ? data[0] : data;
     } catch (error) {
-      console.error('Error creating field:', error);
+      logger.error('Error creating field:', error);
       throw error;
     }
   },
@@ -249,7 +268,7 @@ export const fieldAPI = {
       });
       if (!response.ok) throw new Error('Failed to delete field');
     } catch (error) {
-      console.error('Error deleting field:', error);
+      logger.error('Error deleting field:', error);
       throw error;
     }
   },
@@ -270,38 +289,59 @@ export const recordAPI = {
         url += `&${filterQuery}`;
       }
 
+      logger.log('Fetching records from URL:', url);
+
       const response = await fetch(url, {
         headers: getHeaders(),
       });
-      if (!response.ok) throw new Error('Failed to fetch records');
-      return await response.json();
+
+      logger.log('Records response status:', response.status);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        logger.error('Records API Error Response:', errorText);
+        throw new APIError(`Failed to fetch records: ${errorText}`, response.status);
+      }
+
+      const data = await response.json();
+      logger.log(`Fetched ${data.length} records for form ${formId}`);
+      return data;
     } catch (error) {
-      console.error('Error fetching records:', error);
-      throw error;
+      logger.error('Error fetching records:', error);
+
+      if (error instanceof APIError) {
+        throw error;
+      }
+
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new NetworkError();
+      }
+
+      throw new APIError('Failed to load records. Please try again.', 500);
     }
   },
 
   create: async (record: Omit<Record, 'id' | 'username'>): Promise<Record> => {
     try {
-      console.log('Creating record:', { ...record, username: USERNAME });
+      logger.log('Creating record:', { ...record, username: USERNAME });
       const response = await fetch(`${API_BASE}/record`, {
         method: 'POST',
         headers: getHeaders('POST'),
         body: JSON.stringify({ ...record, username: USERNAME }),
       });
-      console.log('Create record response status:', response.status);
+      logger.log('Create record response status:', response.status);
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('Create record error:', errorText);
+        logger.error('Create record error:', errorText);
         throw new Error(`Failed to create record: ${response.status} ${errorText}`);
       }
 
       const data = await response.json();
-      console.log('Created record data:', data);
+      logger.log('Created record data:', data);
       return Array.isArray(data) ? data[0] : data;
     } catch (error) {
-      console.error('Error creating record:', error);
+      logger.error('Error creating record:', error);
       throw error;
     }
   },
@@ -314,7 +354,7 @@ export const recordAPI = {
       });
       if (!response.ok) throw new Error('Failed to delete record');
     } catch (error) {
-      console.error('Error deleting record:', error);
+      logger.error('Error deleting record:', error);
       throw error;
     }
   },

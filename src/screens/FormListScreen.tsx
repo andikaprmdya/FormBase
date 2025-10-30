@@ -11,6 +11,9 @@ import { SideDrawer } from '../components/SideDrawer';
 import { formAPI } from '../services/api';
 import { colors, spacing, typography } from '../theme';
 import { getStandardMenuItems } from '../constants/navigationMenu';
+import { logger } from '../utils/logger';
+import { getErrorMessage } from '../utils/errors';
+import { ERROR_MESSAGES } from '../constants/appConstants';
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<TabParamList, 'FormsTab'>,
@@ -32,8 +35,9 @@ const FormListScreen: React.FC<Props> = ({ navigation }) => {
       const data = await formAPI.getAll();
       setForms(data);
     } catch (err) {
-      setError('Failed to load forms. Please try again.');
-      console.error(err);
+      const errorMessage = getErrorMessage(err);
+      setError(errorMessage);
+      logger.error('Load forms error:', err);
     } finally {
       setLoading(false);
     }
@@ -59,8 +63,9 @@ const FormListScreen: React.FC<Props> = ({ navigation }) => {
               await formAPI.delete(id);
               loadForms();
             } catch (err) {
-              Alert.alert('Error', 'Failed to delete form');
-              console.error(err);
+              const errorMessage = getErrorMessage(err);
+              Alert.alert('Error', errorMessage || ERROR_MESSAGES.DELETE_FORM_FAILED);
+              logger.error('Delete form error:', err);
             }
           },
         },

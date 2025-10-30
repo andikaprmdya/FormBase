@@ -5,6 +5,8 @@ import { RootStackParamList } from '../types';
 import { Button, Input } from '../components';
 import { formAPI } from '../services/api';
 import { colors, spacing } from '../theme';
+import { logger } from '../utils/logger';
+import { getErrorMessage } from '../utils/errors';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'FormCreate'>;
 
@@ -45,8 +47,9 @@ const FormCreateScreen: React.FC<Props> = ({ navigation }) => {
         },
       ]);
     } catch (err) {
-      Alert.alert('Error', 'Failed to create form. Please try again.');
-      console.error(err);
+      const errorMessage = getErrorMessage(err);
+      Alert.alert('Error', errorMessage || 'Failed to create form. Please try again.');
+      logger.error('Form creation error:', err);
     } finally {
       setLoading(false);
     }

@@ -5,6 +5,8 @@ import { RootStackParamList, FieldType } from '../types';
 import { Button, Input, Card } from '../components';
 import { fieldAPI } from '../services/api';
 import { colors, spacing, typography, borderRadius } from '../theme';
+import { logger } from '../utils/logger';
+import { getErrorMessage } from '../utils/errors';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'FieldCreate'>;
 
@@ -37,8 +39,9 @@ const FieldCreateScreen: React.FC<Props> = ({ navigation, route }) => {
       const fields = await fieldAPI.getByFormId(formId);
       setOrderIndex(fields.length);
     } catch (err) {
-      console.error('Failed to load field order:', err);
-      Alert.alert('Warning', 'Could not determine field order. The field will be added at the end.');
+      const errorMessage = getErrorMessage(err);
+      logger.error('Failed to load field order:', err);
+      Alert.alert('Warning', errorMessage || 'Could not determine field order. The field will be added at the end.');
     }
   };
 
@@ -123,8 +126,8 @@ const FieldCreateScreen: React.FC<Props> = ({ navigation, route }) => {
         },
       ]);
     } catch (err: any) {
-      console.error('Field creation error:', err);
-      const errorMessage = err?.message || 'Failed to create field. Please check your connection and try again.';
+      const errorMessage = getErrorMessage(err);
+      logger.error('Field creation error:', err);
       Alert.alert('Error', errorMessage);
     } finally {
       setLoading(false);

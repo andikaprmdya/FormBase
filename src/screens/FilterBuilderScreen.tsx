@@ -5,6 +5,8 @@ import { RootStackParamList, Field, FilterCriteria, FilterOperator, FilterLogic,
 import { Button, Input, Card, Loading, ErrorView } from '../components';
 import { fieldAPI, recordAPI } from '../services/api';
 import { colors, spacing, typography, borderRadius } from '../theme';
+import { logger } from '../utils/logger';
+import { getErrorMessage } from '../utils/errors';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'FilterBuilder'>;
 
@@ -38,8 +40,9 @@ const FilterBuilderScreen: React.FC<Props> = ({ navigation, route }) => {
       const data = await fieldAPI.getByFormId(formId);
       setFields(data);
     } catch (err) {
-      setError('Failed to load fields. Please try again.');
-      console.error(err);
+      const errorMessage = getErrorMessage(err);
+      setError(errorMessage);
+      logger.error('Load fields error:', err);
     } finally {
       setLoading(false);
     }
@@ -83,8 +86,9 @@ const FilterBuilderScreen: React.FC<Props> = ({ navigation, route }) => {
       const data = await recordAPI.getByFormId(formId, filters);
       setResults(data);
     } catch (err) {
-      Alert.alert('Error', 'Failed to search records. Please try again.');
-      console.error(err);
+      const errorMessage = getErrorMessage(err);
+      Alert.alert('Error', errorMessage || 'Failed to search records. Please try again.');
+      logger.error('Search records error:', err);
     } finally {
       setSearching(false);
     }

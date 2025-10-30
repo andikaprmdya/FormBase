@@ -7,6 +7,10 @@ import { RootStackParamList, Field, RecordValues, LocationValue } from '../types
 import { Button, Input, Card, Loading, ErrorView } from '../components';
 import { fieldAPI, recordAPI } from '../services/api';
 import { colors, spacing, typography, borderRadius } from '../theme';
+import { optimizeImage } from '../utils/imageOptimizer';
+import { IMAGE_CONFIG } from '../constants/appConstants';
+import { logger } from '../utils/logger';
+import { getErrorMessage } from '../utils/errors';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RecordCreate'>;
 
@@ -37,11 +41,9 @@ const RecordCreateScreen: React.FC<Props> = ({ navigation, route }) => {
 
       setFields(data);
     } catch (err: any) {
-      const errorMessage = err?.message?.includes('Failed to fetch')
-        ? 'Network error. Please check your internet connection and try again.'
-        : 'Failed to load form fields. Please try again.';
+      const errorMessage = getErrorMessage(err);
       setError(errorMessage);
-      console.error('Load fields error:', err);
+      logger.error('Load fields error:', err);
     } finally {
       setLoading(false);
     }
@@ -66,8 +68,9 @@ const RecordCreateScreen: React.FC<Props> = ({ navigation, route }) => {
       delete newErrors[fieldName];
       setErrors(newErrors);
     } catch (err) {
-      Alert.alert('Error', 'Failed to get location. Please try again.');
-      console.error(err);
+      const errorMessage = getErrorMessage(err);
+      Alert.alert('Error', errorMessage || 'Failed to get location. Please try again.');
+      logger.error('Location capture error:', err);
     }
   };
 
@@ -90,10 +93,9 @@ const RecordCreateScreen: React.FC<Props> = ({ navigation, route }) => {
         }
         result = await ImagePicker.launchCameraAsync({
           mediaTypes: ImagePicker.MediaTypeOptions.Images,
-          quality: 0.3, // Reduced quality to reduce size
-          base64: true,
+          quality: IMAGE_CONFIG.QUALITY,
           allowsEditing: true,
-          aspect: [4, 3],
+          aspect: IMAGE_CONFIG.ASPECT_RATIO,
         });
       } else {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -103,58 +105,31 @@ const RecordCreateScreen: React.FC<Props> = ({ navigation, route }) => {
         }
         result = await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ImagePicker.MediaTypeOptions.Images,
-          quality: 0.3, // Reduced quality to reduce size
-          base64: true,
+          quality: IMAGE_CONFIG.QUALITY,
           allowsEditing: true,
-          aspect: [4, 3],
+          aspect: IMAGE_CONFIG.ASPECT_RATIO,
         });
       }
 
-      if (!result.canceled && result.assets[0].base64) {
-        const base64Image = `data:image/jpeg;base64,${result.assets[0].base64}`;
+      if (!result.canceled && result.assets[0].uri) {
+        // Use the new image optimizer with progressive quality reduction
+        const optimized = await optimizeImage(result.assets[0].uri, {
+          quality: IMAGE_CONFIG.QUALITY,
+          maxWidth: 1920,
+          maxHeight: 1920,
+        });
 
-        // Check size (hard limit 10MB for security and performance)
-        const sizeInMB = (base64Image.length * 3) / 4 / 1024 / 1024;
-        console.log(`Image size: ${sizeInMB.toFixed(2)} MB`);
-
-        // Hard limit: reject images over 10MB
-        if (sizeInMB > 10) {
-          Alert.alert(
-            'Image Too Large',
-            `Image is ${sizeInMB.toFixed(2)} MB. Maximum allowed size is 10 MB. Please use a smaller image or reduce the quality.`,
-            [{ text: 'OK' }]
-          );
-          return;
-        }
-
-        // Warning for images over 5MB
-        if (sizeInMB > 5) {
-          Alert.alert(
-            'Warning',
-            `Image is ${sizeInMB.toFixed(2)} MB. Large images may slow down the app. Consider using a smaller image.`,
-            [
-              { text: 'Cancel', style: 'cancel' },
-              {
-                text: 'Use Anyway',
-                onPress: () => {
-                  setValues({ ...values, [fieldName]: base64Image });
-                  const newErrors = { ...errors };
-                  delete newErrors[fieldName];
-                  setErrors(newErrors);
-                }
-              }
-            ]
-          );
-        } else {
-          setValues({ ...values, [fieldName]: base64Image });
+        if (optimized) {
+          setValues({ ...values, [fieldName]: optimized.base64 });
           const newErrors = { ...errors };
           delete newErrors[fieldName];
           setErrors(newErrors);
         }
       }
     } catch (err) {
-      Alert.alert('Error', 'Failed to capture image. Please try again.');
-      console.error(err);
+      const errorMessage = getErrorMessage(err);
+      Alert.alert('Error', errorMessage || 'Failed to capture image. Please try again.');
+      logger.error('Image capture error:', err);
     }
   };
 
@@ -256,15 +231,12 @@ const RecordCreateScreen: React.FC<Props> = ({ navigation, route }) => {
         },
       ]);
     } catch (err: any) {
-      console.error('Record save error:', err);
-      let errorMessage = 'Failed to save record. Please try again.';
+      logger.error('Record save error:', err);
+      let errorMessage = getErrorMessage(err);
 
-      if (err?.message?.includes('Failed to fetch') || err?.message?.includes('Network request failed')) {
-        errorMessage = 'Network error. Please check your internet connection and try again.';
-      } else if (err?.message?.includes('413') || err?.message?.includes('Payload Too Large')) {
+      // Additional check for payload size
+      if (err?.message?.includes('413') || err?.message?.includes('Payload Too Large')) {
         errorMessage = 'The record is too large (likely due to images). Please use smaller images.';
-      } else if (err?.message) {
-        errorMessage = err.message;
       }
 
       Alert.alert('Error', errorMessage);
